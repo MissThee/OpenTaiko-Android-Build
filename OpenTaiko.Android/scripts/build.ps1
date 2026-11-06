@@ -105,6 +105,12 @@ $buildArgs = @(
     "-p:AndroidSdkDirectory=$AndroidSdk",
     "-p:JavaSdkDirectory=$JavaSdk"
 )
+# Pin the compile SDK to a platform we actually installed (setup-android-env.ps1
+# writes ANDROID_TARGET_SDK_VERSION). Keeps CI deterministic regardless of which
+# API level the net10.0-android workload defaults to.
+if ($env:ANDROID_TARGET_SDK_VERSION) {
+    $buildArgs += "-p:AndroidTargetSdkVersion=$env:ANDROID_TARGET_SDK_VERSION"
+}
 if ($Release) {
     # csc-optimized IL crashes the Mono 8.0.10 interpreter at boot (interp.c:3847 assert, verified
     # on the emulator by bisection: Debug+Optimize=true crashes identically, Release+Optimize=false
