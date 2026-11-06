@@ -25,15 +25,23 @@ public static class AssetExtractor {
 		// songs-bundled build over a plain one (same version code) still re-runs extraction.
 		bool hasBundledSongs = AssetExists(assets, "songs.zip");
 		string stampPath = Path.Combine(targetRoot, ".assets_version");
-		string stamp = $"v{versionCode}{(hasBundledSongs ? "+songs" : "")}";
-		if (File.Exists(stampPath) && File.ReadAllText(stampPath).Trim() == stamp) {
-			SweepStalePartFiles(targetRoot);   // clear litter from builds that used the .part scheme
-			return;
-		}
 
 		string[] index;
 		using (var reader = new StreamReader(assets.Open("assets_index.txt")))
 			index = reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+		// The stamp carries the asset-list size as well as the version code: rebuilding/installing an APK
+		// with the same version code but a different asset set (typical for local iterative builds, where
+		// ApplicationVersion stays 1) must re-run extraction — otherwise files an earlier build never
+		// shipped (e.g. the System skin folder) are never written and the game aborts at startup with
+		// "No compatible skin was found". The System check additionally self-heals an app whose data root
+		// was wiped or only partially populated despite a matching stamp.
+		string stamp = $"v{versionCode}-{index.Length}{(hasBundledSongs ? "+songs" : "")}";
+		if (File.Exists(stampPath) && File.ReadAllText(stampPath).Trim() == stamp
+			&& Directory.Exists(Path.Combine(targetRoot, "System"))) {
+			SweepStalePartFiles(targetRoot);   // clear litter from builds that used the .part scheme
+			return;
+		}
 
 		int done = 0;
 		byte[] buffer = new byte[256 * 1024];

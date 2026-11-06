@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using System.Diagnostics;
+using System.Drawing;
 using FDK;
 
 namespace OpenTaiko;
@@ -125,8 +126,15 @@ internal class CSystemError : CStage {
 	// CStage Implementation
 
 	public override void Activate() {
-		// Allocate the resource exceptionally on Activate as CreateManagedResource is conditioned to PreloadAssets
-		this._pfText = HPrivateFastFont.tInstantiateFont("", 20); // Force fallback font
+		// Allocate the resource exceptionally on Activate as CreateManagedResource is conditioned to PreloadAssets.
+		// This class is a last-resort error screen — it can be entered when skin/font init failed (e.g. a skin
+		// that failed to load on Android), so a font failure here must NOT throw and mask the original error.
+		try {
+			this._pfText = HPrivateFastFont.tInstantiateFont("", 20); // Force fallback font
+		} catch (Exception ex) {
+			this._pfText = null;
+			Trace.TraceWarning($"System error screen font init failed (error text may not render): {ex.Message}");
+		}
 		base.Activate();
 	}
 	public override void DeActivate() {

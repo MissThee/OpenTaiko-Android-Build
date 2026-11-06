@@ -468,8 +468,12 @@ internal class OpenTaiko : Game {
 		// A Lua Exit(...) requested a transition: hand the switch to CStageTransition (it renders the still-
 		// mounted outgoing stage during fade-out, activates the target behind a loading screen, then fades in).
 		var pending = CStageTransition.ConsumePendingScript();
-		if (rCurrentStage == pending?.stage && Stage != null) {
-			stageTransition.Begin(rCurrentStage, Stage, CStageTransition.ActivateStep(Stage), default, pending!.Value.script, traceMessage);
+		// `rCurrentStage == pending?.stage` used to be true when BOTH were null (startup, or a
+		// TriggerSystemError raised before any stage exists — e.g. a failed skin init). The branch then
+		// did `pending!.Value.script` and threw "Nullable object must have a value", masking the real
+		// startup error. Require an actual pending script before taking the transition path.
+		if (pending.HasValue && rCurrentStage == pending.Value.stage && Stage != null) {
+			stageTransition.Begin(rCurrentStage, Stage, CStageTransition.ActivateStep(Stage), default, pending.Value.script, traceMessage);
 			rPreviousStage = rCurrentStage;
 			rCurrentStage = stageTransition;   // outgoing stays mounted; the transition unmounts it after fade-out
 			return;
@@ -1511,8 +1515,11 @@ internal class OpenTaiko : Game {
 		}
 #if !DEBUG
 		catch (Exception e) {
+			// Log and surface the real cause; previously a non-DirectoryNotFound failure recorded only the
+			// errno, leaving no trace of why the skin was rejected on this platform.
+			Trace.TraceError(e.ToString());
 			Trace.TraceInformation("Skin failed to initialize.");
-			TriggerSystemError(CSystemError.Errno.ENO_SKINNOTFOUND, null, e is DirectoryNotFoundException ? e.Message + "\n" : null);
+			TriggerSystemError(CSystemError.Errno.ENO_SKINNOTFOUND, e, e is DirectoryNotFoundException ? e.Message + "\n" : e.Message);
 			return;
 			//throw;
 		} finally {
