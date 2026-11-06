@@ -1771,18 +1771,27 @@ internal class OpenTaiko : Game {
 		#endregion
 
 		#region [ Discord Rpc initialisation]
-		DiscordClient = new DiscordRpcClient("939341030141096007");
-		DiscordClient?.Initialize();
-		StartupTime = DateTime.UtcNow;
-		DiscordClient?.SetPresence(new RichPresence() {
-			Details = "",
-			State = "Startup",
-			Timestamps = new Timestamps(OpenTaiko.StartupTime),
-			Assets = new Assets() {
-				LargeImageKey = OpenTaiko.LargeImageKey,
-				LargeImageText = OpenTaiko.LargeImageText,
-			}
-		});
+		// Discord Rich Presence is desktop-only: on Android/iOS the pipe/client is unavailable and its
+		// init can throw (e.g. "Nullable object must have a value"), which — being unguarded here —
+		// would otherwise abort the entire launch. Treat it as best-effort: log and continue without
+		// presence rather than taking the whole game down with it.
+		try {
+			DiscordClient = new DiscordRpcClient("939341030141096007");
+			DiscordClient?.Initialize();
+			StartupTime = DateTime.UtcNow;
+			DiscordClient?.SetPresence(new RichPresence() {
+				Details = "",
+				State = "Startup",
+				Timestamps = new Timestamps(OpenTaiko.StartupTime),
+				Assets = new Assets() {
+					LargeImageKey = OpenTaiko.LargeImageKey,
+					LargeImageText = OpenTaiko.LargeImageText,
+				}
+			});
+		} catch (Exception ex) {
+			DiscordClient = null;
+			Trace.TraceWarning($"Discord Rich Presence unavailable (non-fatal): {ex.Message}");
+		}
 		#endregion
 
 		// Set up the HTTP server.

@@ -148,7 +148,9 @@ public class MainActivity : Activity, ISurfaceHolderCallback {
 		} catch (Exception ex) {
 			CrashLog.Write(ex, "GameInit");
 			global::Android.Util.Log.Error("OpenTaiko", $"Game init failed: {ex}");
-			RunOnUiThread(() => { if (_loadingLabel != null) _loadingLabel.Text = $"Startup failed:\n{ex.Message}"; });
+			// Show the full exception (message + stack) so the exact throw site is visible on-device;
+			// the complete trace is also in files/CrashLogs/GameInit*.txt and logcat.
+			RunOnUiThread(() => { if (_loadingLabel != null) _loadingLabel.Text = $"Startup failed:\n{ex}"; });
 			return;
 		}
 		RunOnUiThread(() => _loadingLabel!.Visibility = ViewStates.Gone);
