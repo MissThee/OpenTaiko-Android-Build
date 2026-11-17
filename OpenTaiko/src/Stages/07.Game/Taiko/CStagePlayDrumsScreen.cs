@@ -192,7 +192,7 @@ internal partial class CStagePlayDrumsScreen : CStagePlayScreenCommon {
 				this.soundAdlib[actual] = OpenTaiko.SoundManager.tCreateSound(hs.adlib[actual], ESoundGroup.SoundEffect);
 				this.soundClap[actual] = OpenTaiko.SoundManager.tCreateSound(hs.clap[actual], ESoundGroup.SoundEffect);
 
-				int _panning = OpenTaiko.ConfigIni.nPanning[OpenTaiko.ConfigIni.nPlayerCount - 1][actual];
+				var _panning = OpenTaiko.ConfigIni.nPanning[OpenTaiko.ConfigIni.nPlayerCount - 1][actual];
 				if (this.soundRed[actual] != null) this.soundRed[actual]!.SoundPosition = _panning;
 				if (this.soundBlue[actual] != null) this.soundBlue[actual]!.SoundPosition = _panning;
 				if (this.soundAdlib[actual] != null) this.soundAdlib[actual]!.SoundPosition = _panning;
@@ -467,7 +467,7 @@ internal partial class CStagePlayDrumsScreen : CStagePlayScreenCommon {
 			if (!BGA_Shown && !OpenTaiko.ConfigIni.bTokkunMode) {
 				actRollChara.Draw();
 				if (!this.isMultiPlay) {
-					if (OpenTaiko.ConfigIni.ShowDancer)
+					if (OpenTaiko.ConfigIni.ShowDancer && !actBackground.CrowdHidden)
 						actDancer.Draw();
 					if (OpenTaiko.ConfigIni.ShowFooter)
 						this.actFooter.Draw();
@@ -491,7 +491,7 @@ internal partial class CStagePlayDrumsScreen : CStagePlayScreenCommon {
 			CFrameProfiler.Section("play:mob");
 			// Layer: above-character background elements
 
-			if (!BGA_Shown && !OpenTaiko.ConfigIni.bTokkunMode && OpenTaiko.ConfigIni.ShowMob)
+			if (!BGA_Shown && !OpenTaiko.ConfigIni.bTokkunMode && OpenTaiko.ConfigIni.ShowMob && !actBackground.CrowdHidden)
 				this.actMob.Draw();
 
 			CFrameProfiler.Section("play:game");

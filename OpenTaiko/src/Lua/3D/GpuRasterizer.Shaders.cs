@@ -15,16 +15,41 @@ namespace OpenTaiko {
 		private int _uFlatCol;                                         // per-object flat albedo override (recolour a routed GLB part)
 		private int _uTex2, _uTex3, _uTex4, _uSplat, _uSplatSize, _uTexScale;   // terrain splat blending
 		private int _uNormOn;                                                   // normal-mapped textures
+		private int _uUVAnim;                                                   // uv scroll + wobble (ObjSetUVScroll / ObjSetUVWarp)
 
 		// cached world-program uniform locations per variant; BindWorldProgram copies the active set into _u*
-		private struct WLoc { public FrameLoc Frame; public int Model, NormalMat, Mode, Tex, Cutout, Tint, Alpha, Flat, Rsh, Lit, SunDir, SunCol, Amb, NumLights, LightPosR, LightCol, LightVP, Shadow, ShadowTexel, Emissive, Wet, Time, Ripple, RttFlip, Clip, Fres, Flat2, DeepOn, Tex2, Tex3, Tex4, Splat, SplatSize, TexScale, FlatCol, NormOn, NormTex; }
+		private struct WLoc { public FrameLoc Frame; public int Model, NormalMat, Mode, Tex, Cutout, Tint, Alpha, Flat, Rsh, Lit, SunDir, SunCol, Amb, NumLights, LightPosR, LightCol, LightVP, Shadow, ShadowTexel, Emissive, Wet, Time, Ripple, RttFlip, Clip, Fres, Flat2, DeepOn, Tex2, Tex3, Tex4, Splat, SplatSize, TexScale, FlatCol, NormOn, NormTex, UVAnim, ShadowCmp, ShadowF, SprLit, Cel, SprNear; }
 		private WLoc _locDef, _locSh;
+
+		// EXT world variants (shadow filter, sprite light): built on first use, bound only for those scenes
+		private uint _progExt, _progExtSh;
+		private WLoc _locExt, _locExtSh;
+		private bool _extOk = true, _extMade;
+		private bool _worldExt;
+		private int _uShadowCmp, _uShadowF, _uSprLit;
+		private float _cSprLit;
+		private uint WorldProg => _worldExt ? (_worldShadow ? _progExtSh : _progExt) : (_worldShadow ? _progShadow : _prog);
+		private void EnsureExt() {
+			if (_extMade || !_extOk) return;
+			try {
+				_progExt = CachedProg(Ascii(VS), Ascii("#version 300 es\n#define EXT\n" + FS));
+				_locExt = QueryWLoc(_progExt);
+				_progExtSh = CachedProg(Ascii(VS), Ascii("#version 300 es\n#define SHADOWS\n#define EXT\n" + FS));
+				_locExtSh = QueryWLoc(_progExtSh);
+				_extMade = true;
+			} catch (Exception e) {
+				_extOk = false; LastShaderError = "world ext: " + e.Message;
+				System.Diagnostics.Trace.TraceError("Extended world programs failed, using the plain ones: " + e);
+			}
+		}
+		private void USprLit(float v) { if (_worldExt && v != _cSprLit) { _cSprLit = v; Gl.Uniform1(_uSprLit, v); } }
 
 		// Last values sent to the bound world program's per-draw uniforms, so a draw skips the ones that did not
 		// change. Reset whenever a world program is bound: programs are shared between scenes.
 		private int _cMode, _cCutout, _cLit, _cNormOn;
 		private float _cTr, _cTg, _cTb, _cAlpha, _cEr, _cEg, _cEb, _cFr, _cFg, _cFb, _cKr, _cKg, _cKb, _cKa;
 		private bool _cIdent;
+		private bool _cUvAnim;       // the bound program's uUVAnim is non-zero (only animated objects set it)
 		private double[]? _cModel;   // the transform last sent, by reference (nothing changes a transform during a pass)
 
 		// the shader sources (src/Lua/3D/Shaders, embedded in the assembly)
@@ -88,7 +113,8 @@ namespace OpenTaiko {
 				Clip = g("uClip"), Fres = g("uFres"), Flat2 = g("uFlat2"), DeepOn = g("uDeepOn"),
 				Tex2 = g("uTex2"), Tex3 = g("uTex3"), Tex4 = g("uTex4"), Splat = g("uSplat"),
 				SplatSize = g("uSplatSize"), TexScale = g("uTexScale"), FlatCol = g("uFlatCol"),
-				NormOn = g("uNormOn"), NormTex = g("uNormTex"),
+				NormOn = g("uNormOn"), NormTex = g("uNormTex"), UVAnim = g("uUVAnim"),
+					ShadowCmp = g("uShadowCmp"), ShadowF = g("uShadowF"), SprLit = g("uSprLit"), Cel = g("uCel"), SprNear = g("uSprNear"),
 			};
 		}
 
@@ -96,8 +122,11 @@ namespace OpenTaiko {
 		// Gl.Uniform* in the draw code targets the bound program (locations are NOT guaranteed equal across variants)
 		private void BindWorldProgram(bool shadow) {
 			_worldShadow = shadow && _shadowOk;
-			Gl.UseProgram(_worldShadow ? _progShadow : _prog);
-			var L = _worldShadow ? _locSh : _locDef;
+			var sc = _scene;
+			_worldExt = false;
+			if (sc != null && (sc._shadowSoft > 0 || sc._shadowFade > 0 || sc._spriteLitUsed || sc._cel > 0 || sc._spriteNear > 0)) { EnsureExt(); _worldExt = _extMade; }
+			Gl.UseProgram(WorldProg);
+			var L = _worldExt ? (_worldShadow ? _locExtSh : _locExt) : (_worldShadow ? _locSh : _locDef);
 			_uFrame = L.Frame; _uModel = L.Model; _uNormalMat = L.NormalMat;
 			_uMode = L.Mode; _uTex = L.Tex; _uCutout = L.Cutout; _uTint = L.Tint; _uAlpha = L.Alpha; _uFlat = L.Flat;
 			_uRsh = L.Rsh;
@@ -108,10 +137,13 @@ namespace OpenTaiko {
 			_uClip = L.Clip; _uFres = L.Fres; _uFlat2 = L.Flat2; _uDeepOn = L.DeepOn;
 			_uTex2 = L.Tex2; _uTex3 = L.Tex3; _uTex4 = L.Tex4; _uSplat = L.Splat;
 			_uSplatSize = L.SplatSize; _uTexScale = L.TexScale; _uFlatCol = L.FlatCol;
-			_uNormOn = L.NormOn;
+			_uNormOn = L.NormOn; _uUVAnim = L.UVAnim;
+			_uShadowCmp = L.ShadowCmp; _uShadowF = L.ShadowF; _uSprLit = L.SprLit;
+			if (_worldExt) { Gl.Uniform1(_uSprLit, 0f); _cSprLit = 0f; Gl.Uniform1(L.Cel, sc!._cel); Gl.Uniform1(L.SprNear, sc._spriteNear); }
 			Gl.Uniform1(L.NormTex, 6);   // normal maps sit on texture unit 6
 			ResetUniformCache();
 			UNormOn(0);
+			Gl.Uniform4(_uUVAnim, 0f, 0f, 0f, 0f); _cUvAnim = false;
 		}
 
 		// ── per-draw uniforms of the world program, sent only when they change (see _cMode) ──
@@ -119,6 +151,13 @@ namespace OpenTaiko {
 			_cMode = _cCutout = _cLit = _cNormOn = int.MinValue;
 			_cTr = _cTg = _cTb = _cAlpha = _cEr = _cEg = _cEb = _cFr = _cFg = _cFb = _cKr = _cKg = _cKb = _cKa = float.NaN;
 			_cIdent = false; _cModel = null;
+		}
+		// the uv animation of one object; zero is sent only to clear a previous object's animation
+		private void UUVAnim(SceneObject o) {
+			bool on = o.UvDu != 0 || o.UvDv != 0 || o.UvWarp > 0;
+			if (!on && !_cUvAnim) return;
+			_cUvAnim = on;
+			Gl.Uniform4(_uUVAnim, (float)o.UvDu, (float)o.UvDv, (float)o.UvWarp, (float)o.UvWarpFreq);
 		}
 		private void UMode(int v) { if (v != _cMode) { _cMode = v; Gl.Uniform1(_uMode, v); } }
 		private void UCutout(int v) { if (v != _cCutout) { _cCutout = v; Gl.Uniform1(_uCutout, v); } }

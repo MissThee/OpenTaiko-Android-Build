@@ -406,6 +406,8 @@ internal class OpenTaiko : Game {
 		OpenTaiko.app = this;
 	}
 
+	public string StartStage = "";
+
 	public static string sEncType = "Shift_JIS";
 
 	public static string LargeImageKey {
@@ -836,7 +838,10 @@ internal class OpenTaiko : Game {
 
 					case CStage.EStage.StartUp:
 						if (this.nDrawLoopReturnValue != 0) {
-							UnmountAndChangeLuaStageOrError("_boot", "Boot", CSystemError.Errno.ENO_BOOTNOTFOUND);
+							if (StartStage.Length > 0 && LuaStageWrapper.GetLuaStage(StartStage, preferGlobal: true) != null)
+								UnmountAndChangeLuaStageOrError(StartStage, fromGlobal: true);
+							else
+								UnmountAndChangeLuaStageOrError("_boot", "Boot", CSystemError.Errno.ENO_BOOTNOTFOUND);
 							this.tExecuteGarbageCollection();
 						}
 						break;
@@ -1638,7 +1643,7 @@ internal class OpenTaiko : Game {
 			// iOS: the desktop branch below also creates these; without SongGainController the first note NREs (CTja.tチップの再生).
 			SongGainController = new SongGainController();
 			ConfigIniToSongGainControllerBinder.Bind(ConfigIni, SongGainController);
-			SoundGroupLevelController = new SoundGroupLevelController(CSound.SoundInstances);
+			SoundGroupLevelController = new SoundGroupLevelController(CSound.SoundInstances, CSound.GetAllSoundsSnapshot);
 			ConfigIniToSoundGroupLevelControllerBinder.Bind(ConfigIni, SoundGroupLevelController);
 		} else {
 			Trace.TraceInformation("Initializing sound device...");
@@ -1687,7 +1692,7 @@ internal class OpenTaiko : Game {
 					SongGainController = new SongGainController();
 					ConfigIniToSongGainControllerBinder.Bind(ConfigIni, SongGainController);
 
-					SoundGroupLevelController = new SoundGroupLevelController(CSound.SoundInstances);
+					SoundGroupLevelController = new SoundGroupLevelController(CSound.SoundInstances, CSound.GetAllSoundsSnapshot);
 					ConfigIniToSoundGroupLevelControllerBinder.Bind(ConfigIni, SoundGroupLevelController);
 				} finally {
 					Trace.Unindent();
@@ -2055,9 +2060,13 @@ internal class OpenTaiko : Game {
 				CStagePlayScreenCommon.RestoreSharedDynamicBeat(ConfigIni);
 				AIBattleModMirror.Restore(ConfigIni);
 				CSongReplay.tRestoreVirtualMods();
-				// the exporter mutates the config (hidden window, auto, player count) — never persist that
-				if (!VideoExporter.Active) ConfigIni.tExport(str);
-				Trace.TraceInformation("Saved succesfully. ({0})", str);
+				// exporter config changes and --stage runs are never saved
+				if (VideoExporter.Active || StartStage.Length > 0) {
+					Trace.TraceInformation("Not saved in this mode. ({0})", str);
+				} else {
+					ConfigIni.tExport(str);
+					Trace.TraceInformation("Saved succesfully. ({0})", str);
+				}
 			} catch (Exception e) {
 				Trace.TraceError(e.ToString());
 				Trace.TraceError("Config.ini failed to create. ({0})", str);

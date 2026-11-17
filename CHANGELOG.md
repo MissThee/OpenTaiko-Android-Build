@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.7.0.11] - 2026-11-16 (Beta)
+
+- [Feat] Add a background state command allowing to hide Dancers and Mobs for custom game modes
+- [Enhancement] Reduce the polygon count of the Jukebox in My Room
+- [Chore] Add `--stage` in command line to open the game directly on a given global stage to facilitate their testing
+- [Chore] 3D engine additions for experimental/unreleased stages yet (no changes in my room/tower select) and minor optimizations
+
+## [0.7.0.10] - 2026-11-13 (Beta)
+
+- [Fix] Add an effort value for charts to avoid rewarding too much charts with very little notecount and very high set level
+
+## [0.7.0.9] - 2026-11-13 (Beta)
+
+- [Feat] Add new nameplates and hide the name of secret nameplate types until obtained to prevent spoilers
+- [Fix] Tower play length bonus (for coins) now take account of the song speed in its calculation
+
+## [0.7.0.8] - 2026-11-13 (Beta)
+
+- [Fix] `LuaVideo` volume defaulted to play at full volume regardless of volume settings, until manually adjusted to different volume after initialized
+- [Fix] "Collection was modified" exception was possible when changing volume settings while opening video with audio
+- [Fix] `CSound`: Ensure using playable stream instead of decoding-only stream when mixer is not used, for all sound APIs
+- [Fix] `CSound` stream was not freed when `TempoCreate` or `ChannelGetAttribute` failed for non-user `CSound`s
+- [Enhance] Increase sound panning precision to float and Volume precision to double
+- [Test] Check for mastered volume in `VideoAudioTests.VideoPacketsMuxedAheadOfAudio_StillStart()`
+- [Chore] Fix edited `git add -p` patches to existing codes with trailing spaces could not be applied because NVim respects .editorconfig and removed the trailing space
+
+## [0.7.0.7] - 2026-11-08 (Beta)
+
+- [Feat] Add extra my room items
+- [Enhancement] Minor global modules UI enhancements
+- [Enhancement] Contacts page in the phone for numbers you got from other characters
+
+## [0.7.0.6] - 2026-11-07 (Beta)
+
+- [Enhancement] 3D engine minor additions and optimizations
+
 ## [0.7.0.5] - 2026-11-04 (Beta)
 
 - [Feat] Allow to sell no longer used furniture via the recycle bin

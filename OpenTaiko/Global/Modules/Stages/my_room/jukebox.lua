@@ -22,6 +22,7 @@
 
 local UI = require("uilib")           -- the skin's UI library (UI.Pick), picked on first use
 local I18N = require("Locale.i18n")
+local SongTitle = require("Songs.Title")
 local T = I18N.texts("jukebox")   -- lang/<code>/jukebox.json
 
 local JB = {}
@@ -81,7 +82,7 @@ local function clamp(v, a, b) if v < a then return a end if v > b then return b 
 -- ── song list (filtered, grouped by genre) ─────────────────────────────────────────────────────
 local function nodeEntry(n)
     local ok, e = pcall(function()
-        return { kind = "song", title = n.Title or "?", subtitle = n.Subtitle or "", genre = n.Genre or "?",
+        return { kind = "song", title = SongTitle.of(n) or "?", subtitle = SongTitle.subtitleOf(n) or "", genre = n.Genre or "?",
                  audioPath = n.AudioPath or "", jacket = (n.HasPreimage and n.PreimagePath) or nil,
                  node = n, uid = n.UniqueId or "" }
     end)
@@ -349,7 +350,9 @@ end
 
 -- ── screen glow (the GLB's emissivePart part objects; falls back to nothing on box art) ────────
 local glowItem = nil            -- the furniture entry whose screen we last touched (to restore)
-local function setScreenGlow(item, r, g, b)
+local RAINBOW_PART = "Jukebox_Rainbow"   -- tube part, u runs along the loop
+local RAINBOW_SCROLL = 0.5              -- u per second while playing (one lap in 4 s)
+local function setScreenGlow(item, r, g, b, du)
     if ctx == nil or item == nil then return end
     local inst = ctx.propInstFor(item)
     if inst == nil or inst.parts == nil then return end
@@ -357,6 +360,9 @@ local function setScreenGlow(item, r, g, b)
     if scene == nil or scene.ObjSetEmissive == nil then return end
     for _, p in ipairs(inst.parts) do
         pcall(function() scene:ObjSetEmissive(p.obj, r, g, b) end)
+        if p.material == RAINBOW_PART and scene.ObjSetUVScroll then
+            pcall(function() scene:ObjSetUVScroll(p.obj, du or 0, 0) end)
+        end
     end
 end
 
@@ -372,7 +378,7 @@ local function tickGlow(t)
     glowItem = item
     if pb.playing then
         local p = 0.55 + 0.3 * math.sin(t * 3.2)
-        setScreenGlow(item, p, p * 0.95, p * 0.8)
+        setScreenGlow(item, p, p * 0.95, p * 0.8, RAINBOW_SCROLL)
     elseif pb.paused then
         setScreenGlow(item, 0.3, 0.285, 0.24)
     else
