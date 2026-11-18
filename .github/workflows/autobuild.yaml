@@ -1,6 +1,6 @@
 # Original script from totoa553/OpenTaiko and DragonRatTiger/OpenTaiko
 
-name: Build OpenTaiko (Android)
+name: Build OpenTaiko (Android + iOS)
 
 on:
   push:
@@ -8,8 +8,15 @@ on:
       - main
 
 jobs:
-  build:
+  # ---------------------------------------------------------------------------
+  # 1) prepare - derive the release version, bump/commit it, create the release.
+  #    Runs first. Both platform builds depend on its versionLast output.
+  # ---------------------------------------------------------------------------
+  prepare:
     runs-on: windows-latest
+
+    outputs:
+      versionLast: ${{ steps.extract-versions.outputs.versionLast }}
 
     permissions:
       # Give the default GITHUB_TOKEN write permission to commit and push the
@@ -28,12 +35,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
 
       - name: Observe the Directory
         shell: cmd
@@ -91,6 +92,7 @@ jobs:
               echo "version=" >> $env:GITHUB_ENV
           }
           echo "versionLast=$version" >> $env:GITHUB_ENV
+          echo "versionLast=$version" >> $env:GITHUB_OUTPUT
 
       - name: Bump OpenTaiko version if necessary
         if: env.version != ''
@@ -112,7 +114,7 @@ jobs:
           $changelogPath = "CHANGELOG.md"
 
           :commit for ($c = 0; $c -lt $env:nMessages; ++$c) {
-              # (Re-)read CHANGELOG.md content as (re-)split lines
+              # (Re-)read CHANGELOG.md content as (Re-)split lines
               $changelog = @(Get-Content -Path $changelogPath)
 
               # Read the message as individual items
@@ -181,11 +183,6 @@ jobs:
           }
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref }}
 
-      - name: Build Android APK
-        shell: cmd
-        run: |
-          build-android.bat
-
       - name: Check if tag exists
         uses: mukunku/tag-exists-action@v1.6.0
         id: check-tag
@@ -205,6 +202,156 @@ jobs:
             Please download/update through the OpenTaiko Hub: https://github.com/OpenTaiko/OpenTaiko-Hub/releases
           draft: false
           prerelease: false
+
+  # ---------------------------------------------------------------------------
+  # 2) iOS IPA - builds BEFORE Android on macOS.
+  # ---------------------------------------------------------------------------
+  build-ios:
+    name: Build OpenTaiko (iOS IPA)
+    needs: prepare
+    runs-on: macos-latest
+
+    permissions:
+      contents: write
+
+    env:
+      versionLast: ${{ needs.prepare.outputs.versionLast }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # LOCK THE ENTIRE TOOLCHAIN AS ONE MATCHED SET.
+      # .NET SDK, iOS workload, Xcode and the simulator runtime must all agree:
+      #   SDK 10.0.100 + workload set 10.0.100 -> .NET for iOS 26.0.11017 -> Xcode 26.0
+      # If dotnet-version floats (10.0.x) or the workload is installed unpinned, the
+      # SDK rolls forward to 10.0.4xx and pulls .NET for iOS 27.2.10000, which requires
+      # Xcode 27.2 and would fail with "This version of .NET for iOS (27.2.10000)
+      # requires Xcode 27.2. The current version of Xcode is 26.0.1".
+      # We stay on Xcode 26.0 deliberately: this project targets iOS 14, and Xcode 27
+      # enforces a minimum deployment target of iOS 15 (build-ios.sh asserts iOS 14).
+      - name: Setup .NET 10.0.100 (band matching the Xcode 26.0 workload set)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.100
+
+      # Pin the SDK feature band for every dotnet command in this job (hosted images
+      # carry several SDKs; without this, dotnet build picks the newest one). Job-local
+      # on purpose: it must not affect the Windows/Android build job.
+      - name: Pin .NET SDK + workload set for this job
+        run: |
+          cat > global.json <<'EOF'
+          {
+            "sdk": {
+              "version": "10.0.100",
+              "rollForward": "latestPatch",
+              "workloadVersion": "10.0.100"
+            }
+          }
+          EOF
+          echo "global.json:" && cat global.json
+          echo "active SDK:" && dotnet --version
+
+      - name: Select Xcode 26.0
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.0'
+
+      # global.json pins workloadVersion=10.0.100, so do NOT pass --version here:
+      # dotnet errors with "Cannot specify a particular workload version on the
+      # command line ... when there is already a version specified in global.json".
+      - name: Install iOS workload (version pinned by global.json)
+        run: |
+          dotnet workload install ios
+          dotnet workload --info
+
+      # Apple's toolchain (actool, used to compile the AppIcon asset catalog) needs a
+      # simulator runtime matching the selected Xcode SDK even for a device-only
+      # (ios-arm64) build. macos-latest ships newer runtimes (26.1/26.2/26.3) but not
+      # the iOS 26.0 runtime that Xcode 26.0 (iphonesimulator SDK 23A339) expects, so
+      # actool fails with:
+      #   "No simulator runtime version from [...] available to use with iphonesimulator SDK version 23A339"
+      # For Xcode 26.x the iOS runtime version equals the Xcode version -> pin 26.0
+      # (pinning matters: an unpinned download would grab a newer, incompatible runtime).
+      - name: Install matching iOS simulator runtime
+        run: |
+          xcodebuild -downloadPlatform iOS -buildVersion 26.0 -architectureVariant universal
+          xcrun simctl list runtimes
+
+      - name: Verify Xcode toolchain and pinned workload
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          dotnet --version
+          dotnet workload --info
+
+      - name: Build iOS IPA (iOS 14+)
+        run: bash build-ios.sh
+
+      - name: Upload iOS IPA for the Latest Release
+        uses: xresloader/upload-to-github-release@v1.6.0
+        with:
+          file: "OpenTaiko.iOS.ipa"
+          overwrite: true
+          tag_name: ${{ env.versionLast }}
+          draft: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload iOS dSYM archive for the Latest Release
+        if: hashFiles('OpenTaiko.iOS.dSYM.zip') != ''
+        uses: xresloader/upload-to-github-release@v1.6.0
+        with:
+          file: "OpenTaiko.iOS.dSYM.zip"
+          overwrite: true
+          tag_name: ${{ env.versionLast }}
+          draft: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # 3) Android APK - runs AFTER iOS succeeds (needs: build-ios).
+  # ---------------------------------------------------------------------------
+  build-android:
+    name: Build OpenTaiko (Android APK)
+    needs: [prepare, build-ios]
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    env:
+      versionLast: ${{ needs.prepare.outputs.versionLast }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # prepare already bumped + pushed the version, but a fresh checkout in this
+      # job gets the original triggering commit. Re-apply the final version locally
+      # (no push) so the APK carries the same version as the release tag.
+      - name: Apply release version to project (local, no push)
+        run: |
+          $v = '${{ needs.prepare.outputs.versionLast }}'
+          if ($v) {
+            Write-Host "Setting version to $v for the Android build"
+            (Get-Content OpenTaiko/OpenTaiko.csproj) -replace '<Version>.*<\/Version>', "<Version>$v</Version>" | Set-Content OpenTaiko/OpenTaiko.csproj
+          }
+
+      - name: Build Android APK
+        shell: cmd
+        run: |
+          build-android.bat
 
       - name: Upload Android APK for the Latest Release
         uses: xresloader/upload-to-github-release@v1.6.0

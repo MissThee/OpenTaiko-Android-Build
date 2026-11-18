@@ -119,6 +119,8 @@ if ! $BUILD && { $CLEAN_BUILD || $CLEAN_AND_UNINSTALL; }; then
 fi
 
 # Resolve bundle ID and the matching dotnet -p:ApplicationId override (if any).
+# NOTE: macOS ships bash 3.2, where "${arr[@]}" on an empty array aborts under `set -u`.
+# Empty optional args are therefore expanded as "${arr[@]+"${arr[@]}"}" throughout.
 DEFAULT_BUNDLE_ID=$(grep '<ApplicationId' "$CSPROJ" | sed 's/.*>\(.*\)<.*/\1/')
 APP_ID="${BUNDLE_ID:-$DEFAULT_BUNDLE_ID}"
 BUNDLE_ID_ARG=()
@@ -348,7 +350,7 @@ do_sim() {
     exit 1
   fi
 
-  $BUILD && ios_build "$CONFIG" iossimulator-arm64 "${BUNDLE_ID_ARG[@]}"
+  $BUILD && ios_build "$CONFIG" iossimulator-arm64 "${BUNDLE_ID_ARG[@]+"${BUNDLE_ID_ARG[@]}"}"
   APP_PATH="OpenTaiko.iOS/bin/${CONFIG}/net10.0-ios/iossimulator-arm64/OpenTaiko.iOS.app"
 
   echo "==> Terminating existing app..."
@@ -387,7 +389,7 @@ do_sim() {
       echo "==> Auto-recovering: wiping ${CONFIG} obj/bin + clean rebuild + reinstall (one attempt)..."
       dotnet build-server shutdown >/dev/null 2>&1 || true
       local CLEAN_BUILD=true
-      ios_build "$CONFIG" iossimulator-arm64 "${BUNDLE_ID_ARG[@]}"
+      ios_build "$CONFIG" iossimulator-arm64 "${BUNDLE_ID_ARG[@]+"${BUNDLE_ID_ARG[@]}"}"
       echo "==> Reinstalling rebuilt app..."
       xcrun simctl install "$dev" "$APP_PATH"
       stream_console "$TIMEOUT" xcrun simctl launch --console "$dev" "$APP_ID"
@@ -433,7 +435,7 @@ do_device() {
       -p:RuntimeIdentifier=ios-arm64 \
       -p:CodesignKey="$IDENTITY" \
       -p:CodesignProvision="" \
-      "${BUNDLE_ID_ARG[@]}"
+      "${BUNDLE_ID_ARG[@]+"${BUNDLE_ID_ARG[@]}"}"
   fi
   APP_PATH="OpenTaiko.iOS/bin/${CONFIG}/net10.0-ios/ios-arm64/OpenTaiko.iOS.app"
 
@@ -441,12 +443,12 @@ do_device() {
     local udid_flag=(); [[ -n "$UDID" ]] && udid_flag=(-u "$UDID")
     if $CLEAN_AND_UNINSTALL; then
       echo "==> Uninstalling previous app..."
-      ideviceinstaller "${udid_flag[@]}" uninstall "$APP_ID" 2>/dev/null || true
+      ideviceinstaller "${udid_flag[@]+"${udid_flag[@]}"}" uninstall "$APP_ID" 2>/dev/null || true
     fi
     local ipa_tmp; ipa_tmp=$(mktemp -d); trap "rm -rf $ipa_tmp" RETURN
     make_ipa "$APP_PATH" "$ipa_tmp/app.ipa"
     echo "==> Installing via ideviceinstaller..."
-    ideviceinstaller "${udid_flag[@]}" install "$ipa_tmp/app.ipa"
+    ideviceinstaller "${udid_flag[@]+"${udid_flag[@]}"}" install "$ipa_tmp/app.ipa"
     echo "==> Installed. Launch the app manually on the device."
     echo "    (ideviceinstaller does not support remote launch)"
   else
@@ -475,7 +477,7 @@ do_device() {
       echo "==> Auto-recovering: wiping ${CONFIG} obj/bin + clean rebuild + reinstall (one attempt)..."
       dotnet build-server shutdown >/dev/null 2>&1 || true
       local CLEAN_BUILD=true
-      ios_build "$CONFIG" ios-arm64 -p:RuntimeIdentifier=ios-arm64 -p:CodesignKey="$IDENTITY" -p:CodesignProvision="" "${BUNDLE_ID_ARG[@]}"
+      ios_build "$CONFIG" ios-arm64 -p:RuntimeIdentifier=ios-arm64 -p:CodesignKey="$IDENTITY" -p:CodesignProvision="" "${BUNDLE_ID_ARG[@]+"${BUNDLE_ID_ARG[@]}"}"
       echo "==> Reinstalling rebuilt app..."
       xcrun devicectl device install app --device "$DEVICE" "$APP_PATH" 2>&1 | tail -3
       stream_console "$TIMEOUT" xcrun devicectl device process launch --device "$DEVICE" --console "$APP_ID"
@@ -503,7 +505,7 @@ build_and_package_ipa() {
   esac
 
   if $BUILD; then
-    ios_build Release ios-arm64 -p:RuntimeIdentifier=ios-arm64 "${sign_args[@]}" "${BUNDLE_ID_ARG[@]}"
+    ios_build Release ios-arm64 -p:RuntimeIdentifier=ios-arm64 "${sign_args[@]}" "${BUNDLE_ID_ARG[@]+"${BUNDLE_ID_ARG[@]}"}"
   fi
   APP_PATH="OpenTaiko.iOS/bin/Release/net10.0-ios/ios-arm64/OpenTaiko.iOS.app"
   [[ -d "$APP_PATH" ]] || { echo "Error: $APP_PATH not found (build skipped or failed)."; exit 1; }

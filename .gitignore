@@ -79,7 +79,7 @@ TestResults/
 /OpenTaiko/Global/Modules/Stages/egg
 /OpenTaiko/System/Open-World Memories/Modules/Stages/raytracer
 /OpenTaiko/System/Open-World Memories/Modules/Stages/iso_demo2
-/OpenTaiko/System/Open-World Memories/Modules/Stages/voxel/tools
+/OpenTaiko/System/Open-World Memories/Modules/Stages/voxel/tool
 /OpenTaiko/System/Open-World Memories/Modules/Stages/sprites
 /OpenTaiko/Global/Modules/Stages/kart_racing
 
@@ -88,6 +88,10 @@ TestResults/
 /OpenTaiko.iOS/Libs/
 /OpenTaiko.iOS/Frameworks/
 /OpenTaiko.iOS/dist/
+# IPA + dSYM produced by build-ios.sh at the repo root for CI upload
+/OpenTaiko.iOS.ipa
+/OpenTaiko.iOS.dSYM.zip
+
 # AppIcon PNGs are generated from OpenTaiko/OpenTaiko.ico at build (scripts/build-appicons.sh)
 /OpenTaiko.iOS/Assets.xcassets/AppIcon.appiconset/icon_*.png
 /OpenTaiko/System/Open-World Memories/Modules/Stages/experimentp
