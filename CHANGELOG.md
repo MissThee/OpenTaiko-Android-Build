@@ -2,6 +2,10 @@
 
 ## [0.7.0.12] - 2026-11-19 (Beta)
 
+# Conflicts:
+#	CHANGELOG.md
+- [Fix] Move theme settings to global to prevent them being wiped on skin update
+- [Fix] Results Background were still parsed through the legacy Backgrounds folder and script which is unintended behavior
 - [Fix] Move theme settings to global to prevent them being wiped on skin update
 - [Fix] Results Background were still parsed through the legacy Backgrounds folder and script which is unintended behavior
 
