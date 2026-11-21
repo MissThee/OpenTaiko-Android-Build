@@ -3,9 +3,11 @@
 ## [0.7.0.15] - 2026-11-21 (Beta)
 
 - [Fix] Catch failure to load FFmpeg and/or lmdb libraries and allow to run the game with those disabled when it happens (at a specified tradeoff)
+- [Fix] Catch failure to load FFmpeg and/or lmdb libraries and allow to run the game with those disabled when it happens (at a specified tradeoff)
 
 ## [0.7.0.14] - 2026-11-21 (Beta)
 
+- [Fix] Fix rare glitched text glitch due to stale memory on the text renderer
 - [Fix] Fix rare glitched text glitch due to stale memory on the text renderer
 
 ## [0.7.0.13] - 2026-11-20 (Beta)
